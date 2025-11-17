@@ -22,6 +22,16 @@
       font-weight: bold;
       color: #333;
     }
+    .success { color: #28a745; }
+    .error { color: #dc3545; }
+    .info { color: #17a2b8; }
+    #apiResult {
+      margin-top: 15px;
+      padding: 10px;
+      border-radius: 5px;
+      background-color: #f8f9fa;
+      min-height: 50px;
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 </head>
@@ -35,25 +45,81 @@
   <canvas id="canvas" style="display:none;"></canvas>
 
   <div id="result">尚未掃描到資料</div>
+  <div id="apiResult"></div>
 
   <script>
     const video = document.getElementById("video");
     const canvas = document.getElementById("canvas");
     const context = canvas.getContext("2d");
     const resultBox = document.getElementById("result");
+    const apiResultBox = document.getElementById("apiResult");
+    
+    let isScanning = true;
+    const API_URL = "https://123.123.123.123/N8N";
 
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         video.srcObject = stream;
         video.style.display = "block";
+        isScanning = true;
       } catch (err) {
         resultBox.textContent = "無法存取相機: " + err;
+        resultBox.className = "error";
+      }
+    }
+
+    // 解析QRCode格式：四位數字 + 最多16碼英文
+    function parseQRCode(data) {
+      const regex = /^(\d{4})([A-Za-z]{1,16})$/;
+      const match = data.match(regex);
+      
+      if (match) {
+        return {
+          valid: true,
+          numbers: match[1],
+          letters: match[2],
+          original: data
+        };
+      }
+      
+      return {
+        valid: false,
+        original: data
+      };
+    }
+
+    // 呼叫API
+    async function callAPI(parsedData) {
+      try {
+        apiResultBox.innerHTML = '<span class="info">正在呼叫API...</span>';
+        
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            numbers: parsedData.numbers,
+            letters: parsedData.letters,
+            originalData: parsedData.original,
+            timestamp: new Date().toISOString()
+          })
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          apiResultBox.innerHTML = `<span class="success">✓ API呼叫成功</span><br><small>回應: ${JSON.stringify(result)}</small>`;
+        } else {
+          apiResultBox.innerHTML = `<span class="error">✗ API呼叫失敗 (${response.status})</span>`;
+        }
+      } catch (error) {
+        apiResultBox.innerHTML = `<span class="error">✗ 網路錯誤: ${error.message}</span>`;
       }
     }
 
     function scanQRCode() {
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      if (video.readyState === video.HAVE_ENOUGH_DATA && isScanning) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -62,8 +128,33 @@
         const code = jsQR(imgData.data, imgData.width, imgData.height);
 
         if (code) {
-          resultBox.textContent = "掃描成功：" + code.data;
-          window.location.href = code.data; // 自動導向掃描到的網址
+          isScanning = false; // 停止掃描避免重複處理
+          
+          const parsedData = parseQRCode(code.data);
+          
+          if (parsedData.valid) {
+            resultBox.innerHTML = `<span class="success">✓ 掃描成功</span><br>
+              數字: ${parsedData.numbers}<br>
+              英文: ${parsedData.letters}`;
+            resultBox.className = "success";
+            
+            // 呼叫API
+            callAPI(parsedData);
+          } else {
+            resultBox.innerHTML = `<span class="error">✗ 格式錯誤</span><br>
+              應為：4位數字 + 最多16碼英文<br>
+              掃描到: ${parsedData.original}`;
+            resultBox.className = "error";
+            apiResultBox.innerHTML = '<span class="error">格式不符，未呼叫API</span>';
+          }
+          
+          // 3秒後重新開始掃描
+          setTimeout(() => {
+            isScanning = true;
+            resultBox.innerHTML = "準備下次掃描...";
+            resultBox.className = "info";
+            apiResultBox.innerHTML = "";
+          }, 3000);
         }
       }
       requestAnimationFrame(scanQRCode);
