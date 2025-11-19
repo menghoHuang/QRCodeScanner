@@ -234,11 +234,10 @@
     }
 
     function loadMemberInfo() {
-      const memberId = getUrlParameter('id');
       const apiDataParam = getUrlParameter('data');
       
-      if (!memberId || !apiDataParam) {
-        // 沒有會員ID或API資料，直接跳回掃描頁面
+      if (!apiDataParam) {
+        // 沒有API資料，直接跳回掃描頁面
         alert('查無報到資料');
         goBack();
         return;
