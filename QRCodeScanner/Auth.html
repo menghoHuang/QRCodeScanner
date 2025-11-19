@@ -234,10 +234,9 @@
     }
 
     function loadMemberInfo() {
-      const memberId = getUrlParameter('id');
       const apiDataParam = getUrlParameter('data');
       
-      if (!memberId || !apiDataParam) {
+      if (!apiDataParam) {
         // 沒有會員ID或API資料，直接跳回掃描頁面
         goBack();
         return;
@@ -284,7 +283,6 @@
 
     async function confirmCheckIn() {
       if (confirm('請確認已收費，並允許報到')) {
-        const memberId = getUrlParameter('id');
         const apiDataParam = getUrlParameter('data');
         
         if (!apiDataParam) {
