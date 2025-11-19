@@ -55,7 +55,7 @@
     const apiResultBox = document.getElementById("apiResult");
     
     let isScanning = true;
-    const API_URL = "https://frogjump-n8n.zeabur.app/webhook-test/47cc7259-c149-48c1-b423-995bc9017c35";
+    const API_URL = "https://frogjump-n8n.zeabur.app/webhook/716308eb-2cba-480e-8a72-f96de4461e42";
 
     async function startCamera() {
       try {
@@ -201,7 +201,7 @@
             resultBox.className = "success";
             
             // 掃描成功：直接呼叫API並準備跳轉
-            callAPIAndRedirect(parsedData);
+            callAPI(parsedData);
           } else {
             // 掃描失敗：關閉相機，要求重新開啟
             resultBox.innerHTML = `<span class="error">✗ 格式錯誤</span><br>應為：4位數字 + 最多16碼英文<br>掃描到: ${parsedData.original}`;
