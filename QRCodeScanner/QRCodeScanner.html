@@ -63,20 +63,43 @@
     
     let isScanning = true;
     const API_URL = "https://frogjump-n8n.zeabur.app/webhook/716308eb-2cba-480e-8a72-f96de4461e42";
+    
+    // 頁面載入時恢復DEAuth值
+    $(document).ready(function() {
+      const savedDEAuth = sessionStorage.getItem('deAuth');
+      if (savedDEAuth) {
+        $("#deAuthInput").val(savedDEAuth);
+      }
+      
+      // 監聽DEAuth輸入變化並保存
+      $("#deAuthInput").on('input', function() {
+        sessionStorage.setItem('deAuth', $(this).val());
+      });
+    });
 
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         video.srcObject = stream;
         video.style.display = "block";
-        isScanning = true;
         
         // 隱藏開始按鈕並重置顯示
         $("#startBtn").hide();
         $(resultBox).html("正在掃描QRCode...").removeClass().addClass("info");
         $(apiResultBox).html("");
+        
+        // 等待視頻準備就緒後才設置掃描狀態
+        video.addEventListener('loadedmetadata', () => {
+          isScanning = true;
+        });
+        
+        // 如果視頻已經準備就緒，直接設置
+        if (video.readyState >= 2) {
+          isScanning = true;
+        }
       } catch (err) {
         $("#result").text("無法存取相機: " + err).removeClass().addClass("error");
+        isScanning = false;
       }
     }
 
@@ -145,6 +168,9 @@
       try {
         const deAuthValue = $("#deAuthInput").val().trim();
         
+        // 保存DEAuth值到sessionStorage
+        sessionStorage.setItem('deAuth', deAuthValue);
+        
         if (!deAuthValue) {
           $(apiResultBox).html('<span class="error">請先輸入DEAuth認證碼</span>');
           setTimeout(() => {
@@ -193,6 +219,25 @@
             window.location.href = "Auth.html?data=" + encodedData + "&deAuth=" + encodeURIComponent(deAuthValue);
           }, 2000);
         } else {
+          // 檢查404錯誤是否有JSON回應
+          if (response.status === 404) {
+            try {
+              const errorData = await response.json();
+              if (errorData.Message) {
+                $(apiResultBox).html(`<span class="error">✗ ${errorData.Message}</span>`);
+                setTimeout(() => {
+                  stopCamera();
+                  $(resultBox).html(errorData.Message).removeClass().addClass("error");
+                  $(apiResultBox).html("");
+                  $("#startBtn").show();
+                }, 3000);
+                return;
+              }
+            } catch (e) {
+              // 如果無法解析JSON，使用預設訊息
+            }
+          }
+          
           $(apiResultBox).html(`<span class="error">✗ API呼叫失敗 (${response.status})</span>`);
           // API失敗也視為掃描失敗，關閉相機
           setTimeout(() => {
