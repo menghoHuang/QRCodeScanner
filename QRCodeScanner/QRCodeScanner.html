@@ -34,10 +34,17 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 </head>
 <body>
   <h2>QRCode 掃描器</h2>
   <p>將 QRCode 對準鏡頭即可自動掃描。</p>
+
+  <div style="margin-bottom: 20px;">
+    <label for="deAuthInput" style="display: block; margin-bottom: 5px; font-weight: bold;">DEAuth 認證碼:</label>
+    <input type="text" id="deAuthInput" placeholder="請輸入DEAuth認證碼" 
+           style="padding: 8px; font-size: 14px; width: 300px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px;">
+  </div>
 
   <button id="startBtn" style="padding:10px 20px; font-size:16px; margin-bottom:20px;">開始使用相機</button>
 
@@ -48,11 +55,11 @@
   <div id="apiResult"></div>
 
   <script>
-    const video = document.getElementById("video");
-    const canvas = document.getElementById("canvas");
+    const video = $("#video")[0]; // 需要原生DOM元素用於camera API
+    const canvas = $("#canvas")[0]; // 需要原生DOM元素用於canvas API
     const context = canvas.getContext("2d");
-    const resultBox = document.getElementById("result");
-    const apiResultBox = document.getElementById("apiResult");
+    const resultBox = $("#result")[0]; // 用於後續操作
+    const apiResultBox = $("#apiResult")[0]; // 用於後續操作
     
     let isScanning = true;
     const API_URL = "https://frogjump-n8n.zeabur.app/webhook/716308eb-2cba-480e-8a72-f96de4461e42";
@@ -65,13 +72,11 @@
         isScanning = true;
         
         // 隱藏開始按鈕並重置顯示
-        document.getElementById("startBtn").style.display = "none";
-        resultBox.innerHTML = "正在掃描QRCode...";
-        resultBox.className = "info";
-        apiResultBox.innerHTML = "";
+        $("#startBtn").hide();
+        $(resultBox).html("正在掃描QRCode...").removeClass().addClass("info");
+        $(apiResultBox).html("");
       } catch (err) {
-        resultBox.textContent = "無法存取相機: " + err;
-        resultBox.className = "error";
+        $("#result").text("無法存取相機: " + err).removeClass().addClass("error");
       }
     }
 
@@ -98,13 +103,15 @@
     // 呼叫API
     async function callAPI(parsedData) {
       try {
-        apiResultBox.innerHTML = '<span class="info">正在呼叫API...</span>';
+        const deAuthValue = $("#deAuthInput").val().trim();
+        
+        $(apiResultBox).html('<span class="info">正在呼叫API...</span>');
         
         const response = await fetch(API_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'DEAuth': '6goq5z5z2U0hQkVw'
+            'DEAuth': deAuthValue
           },
           body: JSON.stringify({
             ID: parsedData.numbers
@@ -113,12 +120,12 @@
 
         if (response.ok) {
           const result = await response.json();
-          apiResultBox.innerHTML = `<span class="success">✓ API呼叫成功</span><br><small>回應: ${JSON.stringify(result)}</small>`;
+          $(apiResultBox).html(`<span class="success">✓ API呼叫成功</span><br><small>回應: ${JSON.stringify(result)}</small>`);
         } else {
-          apiResultBox.innerHTML = `<span class="error">✗ API呼叫失敗 (${response.status})</span>`;
+          $(apiResultBox).html(`<span class="error">✗ API呼叫失敗 (${response.status})</span>`);
         }
       } catch (error) {
-        apiResultBox.innerHTML = `<span class="error">✗ 網路錯誤: ${error.message}</span>`;
+        $(apiResultBox).html(`<span class="error">✗ 網路錯誤: ${error.message}</span>`);
       }
     }
 
@@ -136,13 +143,26 @@
     // 修改後的API呼叫函數，包含跳轉功能
     async function callAPIAndRedirect(parsedData) {
       try {
-        apiResultBox.innerHTML = '<span class="info">正在呼叫API...</span>';
+        const deAuthValue = $("#deAuthInput").val().trim();
+        
+        if (!deAuthValue) {
+          $(apiResultBox).html('<span class="error">請先輸入DEAuth認證碼</span>');
+          setTimeout(() => {
+            stopCamera();
+            $(resultBox).html("請輸入認證碼後重新掃描").removeClass().addClass("error");
+            $(apiResultBox).html("");
+            $("#startBtn").show();
+          }, 2000);
+          return;
+        }
+        
+        $(apiResultBox).html('<span class="info">正在呼叫API...</span>');
         
         const response = await fetch(API_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'DEAuth': '6goq5z5z2U0hQkVw'
+            'DEAuth': deAuthValue
           },
           body: JSON.stringify({
             ID: parsedData.numbers
@@ -151,33 +171,45 @@
 
         if (response.ok) {
           const result = await response.json();
-          apiResultBox.innerHTML = `<span class="success">✓ API呼叫成功，準備跳轉...</span>`;
+          
+          // 檢查是否已經報到
+          if (result.CheckIn === true) {
+            $(apiResultBox).html(`<span class="error">✗ 已經報到，不可重複報到</span>`);
+            setTimeout(() => {
+              stopCamera();
+              $(resultBox).html("已經報到，請重新掃描其他QRCode").removeClass().addClass("error");
+              $(apiResultBox).html("");
+              $("#startBtn").show();
+            }, 3000);
+            return;
+          }
+          
+          $(apiResultBox).html(`<span class="success">✓ API呼叫成功，準備跳轉...</span>`);
           
           // 2秒後跳轉到另一個HTML頁面，並將API回傳資料透過URL參數傳遞
           setTimeout(() => {
             const encodedData = encodeURIComponent(JSON.stringify(result));
-            window.location.href = "Auth.html?data=" + encodedData;
+            const deAuthValue = $("#deAuthInput").val().trim();
+            window.location.href = "Auth.html?data=" + encodedData + "&deAuth=" + encodeURIComponent(deAuthValue);
           }, 2000);
         } else {
-          apiResultBox.innerHTML = `<span class="error">✗ API呼叫失敗 (${response.status})</span>`;
+          $(apiResultBox).html(`<span class="error">✗ API呼叫失敗 (${response.status})</span>`);
           // API失敗也視為掃描失敗，關閉相機
           setTimeout(() => {
             stopCamera();
-            resultBox.innerHTML = "API呼叫失敗，請重新開始";
-            resultBox.className = "error";
-            apiResultBox.innerHTML = "";
-            document.getElementById("startBtn").style.display = "block";
+            $(resultBox).html("API呼叫失敗，請重新開始").removeClass().addClass("error");
+            $(apiResultBox).html("");
+            $("#startBtn").show();
           }, 2000);
         }
       } catch (error) {
-        apiResultBox.innerHTML = `<span class="error">✗ 網路錯誤: ${error.message}</span>`;
+        $(apiResultBox).html(`<span class="error">✗ 網路錯誤: ${error.message}</span>`);
         // 網路錯誤也視為掃描失敗，關閉相機
         setTimeout(() => {
           stopCamera();
-          resultBox.innerHTML = "網路錯誤，請重新開始";
-          resultBox.className = "error";
-          apiResultBox.innerHTML = "";
-          document.getElementById("startBtn").style.display = "block";
+          $(resultBox).html("網路錯誤，請重新開始").removeClass().addClass("error");
+          $(apiResultBox).html("");
+          $("#startBtn").show();
         }, 2000);
       }
     }
@@ -197,23 +229,20 @@
           const parsedData = parseQRCode(code.data);
           
           if (parsedData.valid) {
-            resultBox.innerHTML = `<span class="success">✓ 掃描成功</span><br>ID: ${parsedData.numbers}`;
-            resultBox.className = "success";
+            $(resultBox).html(`<span class="success">✓ 掃描成功</span><br>ID: ${parsedData.numbers}`).removeClass().addClass("success");
             
             // 掃描成功：直接呼叫API並準備跳轉
             callAPIAndRedirect(parsedData);
           } else {
             // 掃描失敗：關閉相機，要求重新開啟
-            resultBox.innerHTML = `<span class="error">✗ 格式錯誤</span><br>應為：4位數字 + 最多16碼英文<br>掃描到: ${parsedData.original}`;
-            resultBox.className = "error";
-            apiResultBox.innerHTML = '<span class="error">格式不符，請重新開始掃描</span>';
+            $(resultBox).html(`<span class="error">✗ 格式錯誤</span><br>應為：4位數字 + 最多16碼英文<br>掃描到: ${parsedData.original}`).removeClass().addClass("error");
+            $(apiResultBox).html('<span class="error">格式不符，請重新開始掃描</span>');
             
             setTimeout(() => {
               stopCamera();
-              resultBox.innerHTML = "格式錯誤，請重新開始";
-              resultBox.className = "error";
-              apiResultBox.innerHTML = "";
-              document.getElementById("startBtn").style.display = "block";
+              $(resultBox).html("格式錯誤，請重新開始").removeClass().addClass("error");
+              $(apiResultBox).html("");
+              $("#startBtn").show();
             }, 3000);
           }
         }
@@ -224,7 +253,7 @@
       }
     }
 
-    document.getElementById("startBtn").addEventListener("click", startCamera);
+    $("#startBtn").on("click", startCamera);
     requestAnimationFrame(scanQRCode);
   </script>
 </body>
